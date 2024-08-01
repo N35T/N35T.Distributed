@@ -10,7 +10,7 @@ internal class LogRepository : ILogRepository {
         _dbContext = dbContext;
     }
 
-    private async Task LogAt(DateTimeOffset timestamp, string tableName, LogAction action, string refId, string? column, string? newVal) {
+    private async Task LogAtAsync(DateTimeOffset timestamp, string tableName, LogAction action, string refId, string? column, string? newVal) {
 
         var log = new DistributedActionLog(timestamp, tableName, action, refId, column, newVal);
 
@@ -18,35 +18,35 @@ internal class LogRepository : ILogRepository {
         await _dbContext.SaveChangesAsync();
     }
 
-    private Task Log(string tableName, LogAction action, string refId, string? column, string? newVal) {
-        return LogAt(DateTime.Now, tableName, action, refId, column, newVal); 
+    private Task LogAsync(string tableName, LogAction action, string refId, string? column, string? newVal) {
+        return LogAtAsync(DateTime.Now, tableName, action, refId, column, newVal); 
     }
 
     // TODO: Can old log entries be deleted on update log?
-    public Task LogUpdate(string tableName, string refId, string column, string newVal) {
-        return Log(tableName, LogAction.UPDATE, refId, column, newVal);
+    public Task LogUpdateAsync(string tableName, string refId, string column, string newVal) {
+        return LogAsync(tableName, LogAction.UPDATE, refId, column, newVal);
     }
 
-    public Task LogInsert(string tableName, string refId, string column, string insertedVal) {
-        return Log(tableName, LogAction.INSERT, refId, column, insertedVal);
+    public Task LogInsertAsync(string tableName, string refId, string column, string insertedVal) {
+        return LogAsync(tableName, LogAction.INSERT, refId, column, insertedVal);
     }
 
-    public Task LogDelete(string tableName, string refId) {
-        return Log(tableName, LogAction.DELETE, refId, null, null);
+    public Task LogDeleteAsync(string tableName, string refId) {
+        return LogAsync(tableName, LogAction.DELETE, refId, null, null);
     }
 
-    public Task LogSync() {
-        return Log(nameof(_dbContext.DistributedActionLog), LogAction.SYNC, "0", null, null);
+    public Task LogSyncAsync() {
+        return LogAsync(nameof(_dbContext.DistributedActionLog), LogAction.SYNC, "0", null, null);
     }
     
-    public Task ClearLocalLogs() {
+    public Task ClearLocalLogsAsync() {
         return _dbContext.ClearTable(nameof(_dbContext.DistributedActionLog));
     }
 
-    public Task<List<DistributedActionLog>> GetAllLogs() {
+    public Task<List<DistributedActionLog>> GetAllLogsAsync() {
         return _dbContext.DistributedActionLog.ToListAsync();
     }
-    public Task<List<DistributedActionLog>> GetAllLogsSince(DateTimeOffset timestamp) {
+    public Task<List<DistributedActionLog>> GetAllLogsSinceAsync(DateTimeOffset timestamp) {
         return _dbContext.DistributedActionLog
             .Where(e => e.Timestamp >= timestamp)
             .ToListAsync();

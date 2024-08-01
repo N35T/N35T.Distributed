@@ -1,22 +1,22 @@
-using System.Collections.Immutable;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace N35T.Distributed.Services;
 
-internal class SyncService {
+internal class SyncService : ISyncService {
 
     private readonly ILogDbContext _dbContext;
+    private readonly ILogRepository _logRepo;
 
-    public SyncService(ILogDbContext dbContext) {
+    public SyncService(ILogDbContext dbContext, ILogRepository logRepo) {
         _dbContext = dbContext;
+        _logRepo = logRepo;
     }
 
-    public async Task SyncChangesAsync(List<DistributedActionLog> logs) {
+    public async Task SyncChangesAsync(List<DistributedActionLog> logs, bool clearLogsAfterSync = false) {
         using var transaction = _dbContext.Datatbase.BeginTransaction();
 
         try {
@@ -39,9 +39,14 @@ internal class SyncService {
 
             await Task.WhenAll(tasks);
 
+            if(clearLogsAfterSync) {
+                await _logRepo.ClearLocalLogsAsync();
+            }
+
             transaction.Commit();
         }catch(Exception) {
             transaction.Rollback();
+            throw;
         }
     }
 
@@ -54,36 +59,32 @@ internal class SyncService {
         var dbSetProperty = GetDbSetProperty(tableName);
 
         var entityType = dbSetProperty.PropertyType.GetGenericArguments()[0];
-        var entity = Activator.CreateInstance(entityType);
+        var entity = Activator.CreateInstance(entityType)
+            ?? throw new SynchronizationException($"Could not instantiate type {entityType.FullName}");
 
-        var keyProperty = GetKeyProperty(entityType, tableName);
-        var keyName = keyProperty.Name;
-
-        var keyValue = Convert.ChangeType(id, keyProperty.ClrType);
-        var entityKeyProperty = entityType.GetProperty(keyName)
-            ?? throw new SynchronizationException($"Cannot find property {keyName} in {entityType.FullName}");
-        entityKeyProperty.SetValue(entity, keyValue);
+        SetKeyProperty(tableName, entity, id);
 
         var entityProperties = entityType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => !Attribute.IsDefined(p, typeof(NotMappedAttribute))).ToList();
         
-        if(insertLogs.Count != entityProperties.Count) {
+        if(insertLogs.Count > entityProperties.Count) {
             throw new SynchronizationException($"Found insert log statement counts for id {id} in table {tableName} does not fit the amount of properties defined in {entityType.FullName}. Found {insertLogs.Count}, Expected {entityProperties.Count}");
         }
 
-        var setProperties = new HashSet<string>();
         foreach(var log in insertLogs) {
             var property = entityProperties.Find(p => p.Name.Equals(log.AffectedColumn, StringComparison.OrdinalIgnoreCase))
                 ?? throw new SynchronizationException($"Cannot find property {log.AffectedColumn} in {entityType.FullName}");
             
             var convertedValue = ConvertType(log.NewValue, property.PropertyType);
             property.SetValue(entity, convertedValue);
-            setProperties.Add(property.Name);
         }
 
         foreach(var property in entityProperties) {
-            if(!setProperties.Contains(property.Name)) {
-                throw new SynchronizationException($"Property with name {property.Name} was not set in type ${entityType.FullName}");
+            var nullable = Nullable.GetUnderlyingType(property.PropertyType) != null;
+            var required = Attribute.IsDefined(property, typeof(RequiredAttribute));
+            var propValue = property.GetValue(entity);
+            if((required || !nullable) && propValue is null) {
+                throw new SynchronizationException($"The required property {property.Name} of type {entityType.FullName} was not set in a Insertion Log Statement");
             }
         }
 
@@ -148,6 +149,17 @@ internal class SyncService {
         }
 
         return keyProperties[0];
+    }
+
+    private void SetKeyProperty(string tableName, object entity, string value) {
+        var entityType = entity.GetType();
+        var keyProperty = GetKeyProperty(entityType, tableName);
+        var keyName = keyProperty.Name;
+
+        var keyValue = Convert.ChangeType(value, keyProperty.ClrType);
+        var entityKeyProperty = entityType.GetProperty(keyName)
+            ?? throw new SynchronizationException($"Cannot find property {keyName} in {entityType.FullName}");
+        entityKeyProperty.SetValue(entity, keyValue);
     }
 
     private object FindEntity(string tableName, string id, PropertyInfo? dbSetProp = null) {

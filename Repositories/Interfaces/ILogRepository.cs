@@ -2,12 +2,12 @@
 
 public interface ILogRepository {
 
-    Task LogUpdate(string tableName, string refId, string column, string newVal);
-    Task LogInsert(string tableName, string refId, string column, string insertedVal);
-    Task LogDelete(string tableName, string refId);
-    Task LogSync();
-    Task ClearLocalLogs();
+    Task LogUpdateAsync(string tableName, string refId, string column, string newVal);
+    Task LogInsertAsync(string tableName, string refId, string column, string insertedVal);
+    Task LogDeleteAsync(string tableName, string refId);
+    Task LogSyncAsync();
+    Task ClearLocalLogsAsync();
 
-    Task<List<DistributedActionLog>> GetAllLogs();
-    Task<List<DistributedActionLog>> GetAllLogsSince(DateTimeOffset timestamp);
+    Task<List<DistributedActionLog>> GetAllLogsAsync();
+    Task<List<DistributedActionLog>> GetAllLogsSinceAsync(DateTimeOffset timestamp);
 }

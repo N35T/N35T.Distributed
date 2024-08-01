@@ -4,6 +4,11 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>N35T.Distributed</PackageId>
+    <Version>0.0.1</Version>
+    <Authors>Alex Hagl</Authors>
+    <PackageTags>Distrubted, Database, Logging, Synchronization</PackageTags>
+    <Description>WARNING: NOT STABLE YET - STILL WIP. This package will help creating an synchronizing distributed database on the application level.</Description>
   </PropertyGroup>
 
   <ItemGroup>
